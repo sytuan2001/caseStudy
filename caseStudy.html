@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bouncing Ball Game</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .game-container {
+            text-align: center;
+            background: white;
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+
+        h1 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 32px;
+        }
+
+        .score-board {
+            display: flex;
+            justify-content: space-around;
+            margin-bottom: 20px;
+            font-size: 18px;
+            color: #333;
+        }
+
+        .score-item {
+            padding: 10px 20px;
+            background: #f0f0f0;
+            border-radius: 10px;
+        }
+
+        .score-value {
+            font-weight: bold;
+            color: #667eea;
+            font-size: 24px;
+        }
+
+        #gameCanvas {
+            border: 3px solid #667eea;
+            border-radius: 10px;
+            background: #f8f9fa;
+            display: block;
+            margin: 0 auto;
+        }
+
+        .controls {
+            margin-top: 20px;
+            color: #666;
+        }
+
+        .btn {
+            margin-top: 15px;
+            padding: 12px 30px;
+            font-size: 16px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn:hover {
+            background: #764ba2;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .game-over {
+            display: none;
+            margin-top: 20px;
+            padding: 20px;
+            background: #ff6b6b;
+            color: white;
+            border-radius: 10px;
+            font-size: 20px;
+        }
+
+        .instructions {
+            margin-top: 15px;
+            padding: 15px;
+            background: #e3f2fd;
+            border-radius: 10px;
+            color: #1976d2;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+<div class="game-container">
+    <h1>🎮 Bouncing Ball Game</h1>
+
+    <div class="score-board">
+        <div class="score-item">
+            <div>Điểm</div>
+            <div class="score-value" id="score">0</div>
+        </div>
+        <div class="score-item">
+            <div>Thời gian</div>
+            <div class="score-value" id="time">0s</div>
+        </div>
+    </div>
+
+    <canvas id="gameCanvas" width="600" height="400"></canvas>
+
+    <div class="game-over" id="gameOver">
+        <h2>Game Over!</h2>
+        <p>Điểm của bạn: <span id="finalScore"></span></p>
+    </div>
+
+    <button class="btn" id="startBtn" onclick="game.start()">Bắt đầu</button>
+    <button class="btn" id="restartBtn" onclick="game.restart()" style="display:none;">Chơi lại</button>
+
+    <div class="instructions">
+        <strong>Hướng dẫn:</strong> Dùng phím ← → hoặc A D để di chuyển thanh đỡ
+    </div>
+</div>
+
+<script>
+    // Đối tượng GameBoard
+    class GameBoard {
+        constructor(width, height) {
+            this.width = width;
+            this.height = height;
+        }
+    }
+
+    // Đối tượng Ball
+    class Ball {
+        constructor(x, y, radius, angle, speed) {
+            this.x = x;
+            this.y = y;
+            this.radius = radius;
+            this.angle = angle;
+            this.speed = speed;
+            this.vx = Math.cos(angle) * speed;
+            this.vy = Math.sin(angle) * speed;
+        }
+
+        move() {
+            this.x += this.vx;
+            this.y += this.vy;
+        }
+
+        bounceWall(board) {
+            // Va chạm biên trái hoặc phải
+            if (this.x - this.radius <= 0 || this.x + this.radius >= board.width) {
+                this.vx = -this.vx;
+                // Điều chỉnh vị trí để tránh bóng bị kẹt
+                if (this.x - this.radius <= 0) this.x = this.radius;
+                if (this.x + this.radius >= board.width) this.x = board.width - this.radius;
+            }
+
+            // Va chạm biên trên
+            if (this.y - this.radius <= 0) {
+                this.vy = -this.vy;
+                this.y = this.radius;
+            }
+        }
+
+        bounceBar(bar) {
+            // Kiểm tra va chạm với thanh đỡ
+            if (this.y + this.radius >= bar.y &&
+                this.y + this.radius <= bar.y + bar.height &&
+                this.x >= bar.x &&
+                this.x <= bar.x + bar.width) {
+
+                // Đổi hướng bóng
+                this.vy = -Math.abs(this.vy);
+
+                // Điều chỉnh góc dựa trên vị trí chạm và tốc độ thanh đỡ
+                const hitPos = (this.x - bar.x) / bar.width; // 0 to 1
+                const barSpeed = bar.currentSpeed;
+
+                // Thay đổi vx dựa trên vị trí chạm và tốc độ thanh
+                const angleInfluence = (hitPos - 0.5) * 2; // -1 to 1
+                const speedInfluence = barSpeed * 0.3;
+
+                this.vx = this.speed * angleInfluence + speedInfluence;
+
+                // Đảm bảo tốc độ tổng thể không đổi
+                const currentSpeed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+                const scale = this.speed / currentSpeed;
+                this.vx *= scale;
+                this.vy *= scale;
+
+                this.y = bar.y - this.radius;
+                return true;
+            }
+            return false;
+        }
+
+        checkGameOver(board) {
+            return this.y - this.radius > board.height;
+        }
+
+        draw(ctx) {
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+            ctx.fillStyle = '#667eea';
+            ctx.fill();
+            ctx.strokeStyle = '#764ba2';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.closePath();
+        }
+    }
+
+    // Đối tượng Bar (thanh đỡ)
+    class Bar {
+        constructor(width, height, x, y) {
+            this.width = width;
+            this.height = height;
+            this.x = x;
+            this.y = y;
+            this.speed = 8;
+            this.currentSpeed = 0;
+        }
+
+        moveLeft(board) {
+            if (this.x > 0) {
+                this.x -= this.speed;
+                this.currentSpeed = -this.speed;
+            }
+            if (this.x < 0) this.x = 0;
+        }
+
+        moveRight(board) {
+            if (this.x + this.width < board.width) {
+                this.x += this.speed;
+                this.currentSpeed = this.speed;
+            }
+            if (this.x + this.width > board.width) {
+                this.x = board.width - this.width;
+            }
+        }
+
+        resetSpeed() {
+            this.currentSpeed = 0;
+        }
+
+        draw(ctx) {
+            ctx.fillStyle = '#764ba2';
+            ctx.fillRect(this.x, this.y, this.width, this.height);
+
+            // Hiệu ứng gradient
+            const gradient = ctx.createLinearGradient(this.x, this.y, this.x, this.y + this.height);
+            gradient.addColorStop(0, '#667eea');
+            gradient.addColorStop(1, '#764ba2');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(this.x, this.y, this.width, this.height);
+        }
+    }
+
+    // Game Controller
+    class Game {
+        constructor() {
+            this.canvas = document.getElementById('gameCanvas');
+            this.ctx = this.canvas.getContext('2d');
+            this.board = new GameBoard(this.canvas.width, this.canvas.height);
+
+            this.ball = null;
+            this.bar = null;
+            this.isRunning = false;
+            this.score = 0;
+            this.startTime = 0;
+            this.animationId = null;
+            this.keys = {};
+
+            this.setupControls();
+        }
+
+        setupControls() {
+            document.addEventListener('keydown', (e) => {
+                this.keys[e.key] = true;
+            });
+
+            document.addEventListener('keyup', (e) => {
+                this.keys[e.key] = false;
+                if (this.bar) {
+                    this.bar.resetSpeed();
+                }
+            });
+        }
+
+        init() {
+            // Khởi tạo bóng
+            this.ball = new Ball(
+                this.board.width / 2,
+                this.board.height / 2,
+                10,
+                -Math.PI / 4, // Góc -45 độ
+                5
+            );
+
+            // Khởi tạo thanh đỡ
+            this.bar = new Bar(
+                100,
+                15,
+                this.board.width / 2 - 50,
+                this.board.height - 30
+            );
+
+            this.score = 0;
+            this.startTime = Date.now();
+        }
+
+        start() {
+            if (this.isRunning) return;
+
+            this.init();
+            this.isRunning = true;
+
+            document.getElementById('startBtn').style.display = 'none';
+            document.getElementById('restartBtn').style.display = 'none';
+            document.getElementById('gameOver').style.display = 'none';
+
+            this.gameLoop();
+        }
+
+        restart() {
+            this.start();
+        }
+
+        gameLoop() {
+            if (!this.isRunning) return;
+
+            this.update();
+            this.draw();
+
+            this.animationId = requestAnimationFrame(() => this.gameLoop());
+        }
+
+        update() {
+            // Di chuyển bóng
+            this.ball.move();
+
+            // Xử lý va chạm với tường
+            this.ball.bounceWall(this.board);
+
+            // Xử lý va chạm với thanh đỡ
+            if (this.ball.bounceBar(this.bar)) {
+                this.score += 10;
+            }
+
+            // Kiểm tra game over
+            if (this.ball.checkGameOver(this.board)) {
+                this.gameOver();
+                return;
+            }
+
+            // Di chuyển thanh đỡ
+            if (this.keys['ArrowLeft'] || this.keys['a'] || this.keys['A']) {
+                this.bar.moveLeft(this.board);
+            } else if (this.keys['ArrowRight'] || this.keys['d'] || this.keys['D']) {
+                this.bar.moveRight(this.board);
+            } else {
+                this.bar.resetSpeed();
+            }
+
+            // Cập nhật điểm số và thời gian
+            const elapsedTime = Math.floor((Date.now() - this.startTime) / 1000);
+            this.score = Math.max(this.score, elapsedTime * 5);
+
+            document.getElementById('score').textContent = this.score;
+            document.getElementById('time').textContent = elapsedTime + 's';
+        }
+
+        draw() {
+            // Xóa canvas
+            this.ctx.clearRect(0, 0, this.board.width, this.board.height);
+
+            // Vẽ bóng
+            this.ball.draw(this.ctx);
+
+            // Vẽ thanh đỡ
+            this.bar.draw(this.ctx);
+        }
+
+        gameOver() {
+            this.isRunning = false;
+            cancelAnimationFrame(this.animationId);
+
+            document.getElementById('gameOver').style.display = 'block';
+            document.getElementById('finalScore').textContent = this.score;
+            document.getElementById('restartBtn').style.display = 'inline-block';
+        }
+    }
+
+    // Khởi tạo game
+    const game = new Game();
+</script>
+</body>
+</html>
